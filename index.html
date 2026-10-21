@@ -36,7 +36,9 @@
 
     .action-btns { display: flex; gap: 15px; margin-top: 25px; }
     .btn-print { background-color: #28a745; color: white; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; width: 70%; font-weight: bold; }
+    .btn-print:hover { background-color: #218838; }
     .btn-cancel { background-color: #6c757d; color: white; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; width: 30%; }
+    .btn-cancel:hover { background-color: #5a6268; }
 
     #message-area { margin-top: 20px; padding: 12px; border-radius: 4px; text-align: center; display: none; font-weight: bold; }
     .error { background-color: #ffe6e6; color: red; border: 1px solid red; }
@@ -116,7 +118,7 @@
     </table>
 
     <div class="action-btns">
-      <button type="button" class="btn-print" onclick="window.print()">Print Tally Card</button>
+      <button type="button" class="btn-print" id="printBtn" onclick="exportToPdf()">Print Tally Card (PDF)</button>
       <button type="button" class="btn-cancel" onclick="resetForm()">Reset Form</button>
     </div>
   </div>
@@ -142,6 +144,8 @@
   const SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbyGAnVBVbeD4J4II1gsyDPdv-mOYJFLmKsj5nwg1rBz9uZCN6y7uQyttP9GTQBGmkDj-g/exec";
   let fullCatalogue = [];
   let html5QrCode = null;
+  let activeItem = null;
+  let currentTransactions = [];
 
   window.onload = function() { loadCatalogue(); };
 
@@ -197,6 +201,7 @@
   }
 
   function selectItem(item) {
+    activeItem = item;
     document.getElementById('searchResultsSection').style.display = 'none';
     document.getElementById('cardNamaItem').textContent = item.namaItem;
     document.getElementById('cardKodBaru').textContent = item.kodBaru;
@@ -211,6 +216,7 @@
         const tbody = document.getElementById('tallyTableBody');
         tbody.innerHTML = "";
         if (res.success && res.data.length > 0) {
+          currentTransactions = res.data;
           res.data.forEach(row => {
             tbody.innerHTML += `
               <tr>
@@ -226,12 +232,55 @@
             `;
           });
         } else {
+          currentTransactions = [];
           tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No transaction records found for this item.</td></tr>`;
         }
       });
   }
 
+  function exportToPdf() {
+    if (!activeItem) {
+      alert("Please select an item first.");
+      return;
+    }
+
+    const btn = document.getElementById('printBtn');
+    btn.disabled = true;
+    btn.textContent = "Generating KEW.PS-4 PDF...";
+
+    const payload = {
+      kodBaru: activeItem.kodBaru,
+      namaItem: activeItem.namaItem,
+      transactions: currentTransactions
+    };
+
+    fetch(SCRIPT_API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "exportTallyCardPdf",
+        payload: payload
+      })
+    })
+    .then(res => res.json())
+    .then(res => {
+      btn.disabled = false;
+      btn.textContent = "Print Tally Card (PDF)";
+      if (res.success && res.pdfUrl) {
+        window.open(res.pdfUrl, "_blank");
+      } else {
+        alert("Failed to generate PDF: " + res.error);
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = "Print Tally Card (PDF)";
+      alert("Error exporting PDF: " + err);
+    });
+  }
+
   function resetForm() {
+    activeItem = null;
+    currentTransactions = [];
     document.getElementById('tallyCardSection').style.display = 'none';
     document.getElementById('searchResultsSection').style.display = 'none';
     document.getElementById('itemDropdown').selectedIndex = 0;
